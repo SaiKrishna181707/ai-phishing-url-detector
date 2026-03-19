@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend.config import FRONTEND_DIR, HOST, LOG_PATH, PORT, STATIC_DIR, TEMPLATES_DIR
+from backend.config import FRONTEND_DIR, HOST, LOG_LEVEL, LOG_PATH, PORT, STATIC_DIR, TEMPLATES_DIR
 from backend.services.predictor import PredictorService
 
 try:
@@ -35,13 +35,31 @@ except Exception:
     JSONResponse = object
     uvicorn = None
 
+
+def _configure_logging() -> logging.Logger:
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    level = getattr(logging, LOG_LEVEL, logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    if not any(isinstance(handler, RotatingFileHandler) for handler in root_logger.handlers):
+        file_handler = RotatingFileHandler(LOG_PATH, maxBytes=750_000, backupCount=3)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+    if not any(
+        isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler)
+        for handler in root_logger.handlers
+    ):
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        root_logger.addHandler(console_handler)
+
+    return logging.getLogger("phishing_detector")
+
+
+logger = _configure_logging()
 service = PredictorService()
-logger = logging.getLogger("phishing_detector")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = RotatingFileHandler(LOG_PATH, maxBytes=500_000, backupCount=3)
-    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-    logger.addHandler(handler)
 
 
 def _load_index_html() -> str:
@@ -58,17 +76,32 @@ def _predict_payload(url: str) -> tuple[dict[str, object], int]:
     except ValueError as exc:
         logger.warning("Invalid URL received: %s", url)
         return {"detail": str(exc)}, HTTPStatus.BAD_REQUEST
+    except RuntimeError as exc:
+        logger.warning("Runtime error while scanning %s: %s", url, exc)
+        return {"detail": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE
+    except Exception as exc:  # pragma: no cover - safety net
+        logger.exception("Unexpected error while scanning %s", url)
+        return {"detail": f"Unexpected server error: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR
 
-    logger.info("Prediction for %s => %s (%.2f%%)", response.url, response.prediction, response.probability * 100)
+    logger.info(
+        "Prediction for %s => %s (scam %.2f%%)",
+        response.url,
+        response.prediction,
+        response.scam_probability * 100,
+    )
     return response.to_dict(), HTTPStatus.OK
 
 
 if FASTAPI_AVAILABLE:
-    app = FastAPI(title="AI-Powered Phishing & Scam URL Detection System", version="2.0.0")
+    app = FastAPI(title="AI-Powered Phishing & Scam URL Detection System", version="3.0.0")
 
     @app.get("/")
     async def index() -> HTMLResponse:
         return HTMLResponse(_load_index_html())
+
+    @app.get("/api/health")
+    async def health() -> JSONResponse:
+        return JSONResponse({"status": "ok"})
 
     @app.get("/static/{asset_path:path}")
     async def static_files(asset_path: str):
@@ -79,7 +112,10 @@ if FASTAPI_AVAILABLE:
 
     @app.post("/api/predict")
     async def predict(request: Request):
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Request body must be valid JSON.")
         url = str(payload.get("url", ""))
         body, status = _predict_payload(url)
         if status != HTTPStatus.OK:
@@ -153,10 +189,11 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     if FASTAPI_AVAILABLE and uvicorn is not None:
+        logger.info("Starting FastAPI server on http://%s:%s", HOST, PORT)
         uvicorn.run(app, host=HOST, port=PORT)
     else:
         server = ThreadingHTTPServer((HOST, PORT), LocalRequestHandler)
-        print(f"Serving app on http://{HOST}:{PORT} using the built-in fallback server")
+        logger.info("Serving app on http://%s:%s using the built-in fallback server", HOST, PORT)
         server.serve_forever()
 
 

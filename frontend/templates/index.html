@@ -3,54 +3,196 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI-Powered Phishing & Scam URL Detection System</title>
+    <title>AI-Powered Phishing &amp; Scam URL Detection System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/static/css/styles.css" />
   </head>
   <body>
-    <main class="layout">
-      <section class="hero">
-        <p class="eyebrow">Portfolio-ready cybersecurity ML demo</p>
-        <h1>AI-Powered Phishing &amp; Scam URL Detection System</h1>
-        <p class="subtitle">
-          Enter a suspicious link to receive a Safe/Scam prediction, confidence score, and a feature-based explanation.
-        </p>
+    <div class="background-orb orb-one"></div>
+    <div class="background-orb orb-two"></div>
 
-        <form id="predict-form" class="predict-form">
-          <div class="input-group">
-            <input id="url-input" type="text" placeholder="https://example.com/login" autocomplete="off" />
-            <button type="submit">Analyze URL</button>
-          </div>
-          <div class="sample-actions">
-            <button type="button" class="sample-button" data-url="https://www.google.com">Try Safe Sample</button>
-            <button type="button" class="sample-button danger" data-url="secure-login-paypa1.com/verify">Try Scam Sample</button>
-          </div>
-          <p class="helper">Examples: <code>https://www.google.com</code> · <code>secure-login-paypa1.com/verify</code></p>
-        </form>
-      </section>
-
-      <section id="result-card" class="result-card hidden" aria-live="polite">
-        <div class="result-top">
-          <div>
-            <span class="muted">Prediction</span>
-            <h2 id="prediction-label">Awaiting analysis</h2>
-          </div>
-          <span id="probability-pill" class="pill neutral">0% confidence</span>
+    <main class="shell">
+      <section class="hero-panel panel">
+        <div class="hero-copy">
+          <span class="section-tag">Live URL Intelligence</span>
+          <h1>AI-Powered Phishing &amp; Scam URL Detection</h1>
+          <p class="subtitle">
+            Scan suspicious links with a hybrid engine that combines lexical ML, VirusTotal reputation checks,
+            WHOIS domain age, SSL validation, redirect analysis, and phishing-specific heuristics.
+          </p>
         </div>
-        <p id="explanation-text" class="explanation"></p>
-        <div class="meta-grid">
-          <div class="meta-card">
-            <span class="muted">Blacklist match</span>
-            <strong id="blacklist-value">No</strong>
-          </div>
-          <div class="meta-card">
-            <span class="muted">Primary reasons</span>
-            <ul id="reasons-list"></ul>
-          </div>
+
+        <div class="hero-grid">
+          <article class="hero-stat">
+            <span class="stat-label">Hybrid analysis</span>
+            <strong>ML + reputation</strong>
+            <p>Scores URL structure, redirect behavior, infrastructure trust, and blacklist matches in one pass.</p>
+          </article>
+          <article class="hero-stat">
+            <span class="stat-label">Real-time checks</span>
+            <strong>WHOIS + SSL + DNS</strong>
+            <p>Surfaces signals that attackers often fail to hide, including young domains and broken certificates.</p>
+          </article>
+          <article class="hero-stat">
+            <span class="stat-label">Analyst workflow</span>
+            <strong>Risk meter + history</strong>
+            <p>Gives end users clear percentages, explanations, and a recent local scan trail for follow-up checks.</p>
+          </article>
         </div>
       </section>
 
-      <section id="error-card" class="error-card hidden"></section>
+      <section class="workspace">
+        <div class="primary-column">
+          <section class="scan-panel panel">
+            <div class="panel-header">
+              <div>
+                <span class="section-tag">Scan URL</span>
+                <h2>Inspect a link before you click</h2>
+              </div>
+              <p class="muted">
+                The scanner accepts raw domains or full URLs and normalizes them before analysis.
+              </p>
+            </div>
+
+            <form id="predict-form" class="predict-form">
+              <div class="input-group">
+                <input id="url-input" type="text" placeholder="https://example.com/login" autocomplete="off" />
+                <button id="analyze-button" type="submit">
+                  <span id="button-label">Analyze URL</span>
+                  <span id="button-spinner" class="spinner hidden" aria-hidden="true"></span>
+                </button>
+              </div>
+
+              <div class="sample-actions">
+                <button type="button" class="sample-button" data-url="https://www.google.com">
+                  Try Safe Sample
+                </button>
+                <button type="button" class="sample-button danger" data-url="https://secure-login-paypa1.com/verify">
+                  Try Scam Sample
+                </button>
+              </div>
+
+              <p class="helper">
+                Examples: <code>https://www.google.com</code> · <code>secure-login-paypa1.com/verify</code>
+              </p>
+            </form>
+          </section>
+
+          <section id="error-card" class="error-card panel hidden" aria-live="assertive"></section>
+
+          <section id="result-card" class="result-card panel hidden" aria-live="polite">
+            <div class="result-header">
+              <div>
+                <span class="muted">Verdict</span>
+                <h2 id="prediction-label">Awaiting analysis</h2>
+                <p id="scan-time" class="scan-time">Run a scan to see live results.</p>
+              </div>
+              <span id="probability-pill" class="pill neutral">0% confidence</span>
+            </div>
+
+            <div class="risk-layout">
+              <div class="gauge-card">
+                <div id="risk-gauge" class="risk-gauge" style="--gauge-angle: 0deg; --gauge-color: #38bdf8">
+                  <div class="gauge-center">
+                    <strong id="risk-gauge-score">0%</strong>
+                    <span>scam risk</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="score-grid">
+                <article class="score-card">
+                  <span class="muted">Safe likelihood</span>
+                  <strong id="safe-score">0%</strong>
+                </article>
+                <article class="score-card">
+                  <span class="muted">Scam risk</span>
+                  <strong id="scam-score">0%</strong>
+                </article>
+                <article class="score-card">
+                  <span class="muted">Model confidence</span>
+                  <strong id="confidence-score">0%</strong>
+                </article>
+                <article class="score-card">
+                  <span class="muted">Risk level</span>
+                  <strong id="risk-level">Low</strong>
+                </article>
+              </div>
+            </div>
+
+            <p id="explanation-text" class="explanation"></p>
+
+            <div class="check-grid">
+              <article class="check-card">
+                <span class="muted">Domain</span>
+                <strong id="domain-value">Unavailable</strong>
+              </article>
+              <article class="check-card">
+                <span class="muted">Blacklist</span>
+                <strong id="blacklist-value">No</strong>
+              </article>
+              <article class="check-card">
+                <span class="muted">Domain age</span>
+                <strong id="whois-value">Unavailable</strong>
+              </article>
+              <article class="check-card">
+                <span class="muted">SSL certificate</span>
+                <strong id="ssl-value">Unavailable</strong>
+              </article>
+              <article class="check-card">
+                <span class="muted">Redirect chain</span>
+                <strong id="redirect-value">Unavailable</strong>
+              </article>
+              <article class="check-card">
+                <span class="muted">VirusTotal</span>
+                <strong id="virustotal-value">Not configured</strong>
+              </article>
+            </div>
+
+            <div class="detail-grid">
+              <article class="detail-card">
+                <div class="detail-header">
+                  <div>
+                    <span class="section-tag">Signals</span>
+                    <h3>Why this verdict</h3>
+                  </div>
+                  <span class="muted">Top risk indicators</span>
+                </div>
+                <ul id="reasons-list" class="detail-list"></ul>
+              </article>
+
+              <article class="detail-card">
+                <div class="detail-header">
+                  <div>
+                    <span class="section-tag">Redirects</span>
+                    <h3>Redirect path</h3>
+                  </div>
+                  <span class="muted">Final landing URL chain</span>
+                </div>
+                <ul id="redirect-chain" class="detail-list"></ul>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <aside class="history-panel panel">
+          <div class="detail-header">
+            <div>
+              <span class="section-tag">Recent scans</span>
+              <h2>Last 5 checks</h2>
+            </div>
+            <p class="muted">Stored locally in this browser for quick retesting.</p>
+          </div>
+          <ul id="history-list" class="history-list"></ul>
+        </aside>
+      </section>
     </main>
+
     <script src="/static/js/app.js"></script>
   </body>
 </html>

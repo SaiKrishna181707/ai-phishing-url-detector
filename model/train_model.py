@@ -1,8 +1,9 @@
-"""Train the lightweight phishing detector and save a pre-trained model file."""
+"""Train the phishing detector and save a pre-trained model file."""
 from __future__ import annotations
 
 import csv
 import pickle
+import random
 import sys
 from pathlib import Path
 
@@ -17,8 +18,8 @@ DATA_PATH = BASE_DIR / "data" / "url_dataset.csv"
 MODEL_PATH = BASE_DIR / "model" / "phishing_detector.joblib"
 
 
-def load_dataset() -> tuple[list[dict[str, int | float | str]], list[int]]:
-    feature_rows: list[dict[str, int | float | str]] = []
+def load_dataset() -> tuple[list[dict[str, int | float | str | bool]], list[int]]:
+    feature_rows: list[dict[str, int | float | str | bool]] = []
     labels: list[int] = []
     with DATA_PATH.open("r", encoding="utf-8", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
@@ -29,30 +30,74 @@ def load_dataset() -> tuple[list[dict[str, int | float | str]], list[int]]:
     return feature_rows, labels
 
 
-def evaluate(model: SimpleURLModel, feature_rows: list[dict[str, int | float | str]], labels: list[int]) -> tuple[int, int]:
-    correct = 0
-    for feature_row, label in zip(feature_rows, labels):
-        prediction = 1 if model.predict_proba(feature_row) >= 0.5 else 0
-        correct += int(prediction == label)
-    return correct, len(labels)
+def stratified_split(
+    feature_rows: list[dict[str, int | float | str | bool]],
+    labels: list[int],
+    test_ratio: float = 0.2,
+) -> tuple[
+    list[dict[str, int | float | str | bool]],
+    list[dict[str, int | float | str | bool]],
+    list[int],
+    list[int],
+]:
+    rng = random.Random(42)
+    grouped: dict[int, list[tuple[dict[str, int | float | str | bool], int]]] = {0: [], 1: []}
+    for row, label in zip(feature_rows, labels):
+        grouped[int(label)].append((row, label))
+
+    train_pairs: list[tuple[dict[str, int | float | str | bool], int]] = []
+    test_pairs: list[tuple[dict[str, int | float | str | bool], int]] = []
+    for pairs in grouped.values():
+        rng.shuffle(pairs)
+        split_index = max(1, int(len(pairs) * (1 - test_ratio)))
+        train_pairs.extend(pairs[:split_index])
+        test_pairs.extend(pairs[split_index:])
+
+    rng.shuffle(train_pairs)
+    rng.shuffle(test_pairs)
+    train_rows = [row for row, _ in train_pairs]
+    test_rows = [row for row, _ in test_pairs]
+    train_labels = [label for _, label in train_pairs]
+    test_labels = [label for _, label in test_pairs]
+    return train_rows, test_rows, train_labels, test_labels
+
+
+def accuracy_score(labels: list[int], predictions: list[int]) -> float:
+    if not labels:
+        return 0.0
+    correct = sum(int(prediction == label) for prediction, label in zip(predictions, labels))
+    return correct / len(labels)
 
 
 def train_model() -> Path:
     feature_rows, labels = load_dataset()
-    model = SimpleURLModel().fit(feature_rows, labels)
-    correct, total = evaluate(model, feature_rows, labels)
+    train_rows, test_rows, train_labels, test_labels = stratified_split(feature_rows, labels)
+
+    model = SimpleURLModel().fit(train_rows, train_labels)
+    train_probs = model.predict_proba(train_rows)
+    test_probs = model.predict_proba(test_rows)
+    train_predictions = [int(probability >= 0.5) for probability in train_probs]
+    test_predictions = [int(probability >= 0.5) for probability in test_probs]
+    train_accuracy = accuracy_score(train_labels, train_predictions)
+    test_accuracy = accuracy_score(test_labels, test_predictions)
 
     payload = {
-        "model_type": "SimpleURLModel",
+        "model_type": "GaussianNaiveBayes",
         "model": model,
-        "trained_samples": total,
+        "trained_samples": len(feature_rows),
+        "metrics": {
+            "train_accuracy": round(float(train_accuracy), 4),
+            "test_accuracy": round(float(test_accuracy), 4),
+            "train_samples": len(train_rows),
+            "test_samples": len(test_rows),
+        },
     }
     with MODEL_PATH.open("wb") as model_file:
         pickle.dump(payload, model_file)
 
-    accuracy = correct / total if total else 0.0
     print(f"Saved trained model to {MODEL_PATH}")
-    print(f"Training-set accuracy: {accuracy:.2%} ({correct}/{total})")
+    print(f"Train accuracy: {train_accuracy:.2%} ({sum(train_predictions[i] == train_labels[i] for i in range(len(train_labels)))}/{len(train_labels)})")
+    print(f"Test accuracy: {test_accuracy:.2%} ({sum(test_predictions[i] == test_labels[i] for i in range(len(test_labels)))}/{len(test_labels)})")
     return MODEL_PATH
 
 

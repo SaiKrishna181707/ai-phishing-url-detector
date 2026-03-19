@@ -1,5 +1,15 @@
 # Known malicious or demo-blacklisted domains
-paypa1-security-check.com
-verify-account-wallet.net
-secure-update-banking-alert.com
+account-verify-paypal.xyz
+amazon-bonus-center.click
 bit-ly-login-check.com
+coinbase-wallet-recover.support
+dhl-invoice-secure.top
+dropbox-signin-alert.live
+microsoft-account-verify.biz
+netflix-billing-review.xyz
+office365-session-verify.cc
+paypa1-security-check.com
+secure-appleid-signin.top
+secure-update-banking-alert.com
+steam-community-bonus.support
+verify-account-wallet.net

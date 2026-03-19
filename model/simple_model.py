@@ -1,64 +1,82 @@
-"""A lightweight, dependency-free phishing classifier used for demo training."""
+"""Pure-Python model wrapper used for phishing URL classification."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import exp
+from math import exp, log, pi
 
-NUMERIC_FEATURES = [
-    "url_length",
-    "has_https",
-    "special_char_count",
-    "digit_count",
-    "subdomain_count",
-    "suspicious_keyword_count",
-    "contains_ip_like_host",
-    "simulated_domain_age_days",
-    "has_suspicious_tld",
-]
+from model.feature_extractor import MODEL_FEATURES
 
 
 @dataclass
 class SimpleURLModel:
-    """Small probability model trained from feature averages."""
+    """Gaussian naive Bayes model with a small domain-memory bias."""
 
-    safe_means: dict[str, float] = field(default_factory=dict)
-    scam_means: dict[str, float] = field(default_factory=dict)
+    priors: dict[int, float] = field(default_factory=dict)
+    means: dict[int, dict[str, float]] = field(default_factory=dict)
+    variances: dict[int, dict[str, float]] = field(default_factory=dict)
     safe_domains: set[str] = field(default_factory=set)
     scam_domains: set[str] = field(default_factory=set)
 
-    def fit(self, feature_rows: list[dict[str, int | float | str]], labels: list[int]) -> "SimpleURLModel":
-        safe_rows = [row for row, label in zip(feature_rows, labels) if label == 0]
-        scam_rows = [row for row, label in zip(feature_rows, labels) if label == 1]
-        if not safe_rows or not scam_rows:
-            raise ValueError("Training requires both safe and scam samples.")
+    def fit(self, feature_rows: list[dict[str, int | float | str | bool]], labels: list[int]) -> "SimpleURLModel":
+        if not feature_rows:
+            raise ValueError("Training data cannot be empty.")
 
-        self.safe_means = {
-            feature: sum(float(row[feature]) for row in safe_rows) / len(safe_rows)
-            for feature in NUMERIC_FEATURES
-        }
-        self.scam_means = {
-            feature: sum(float(row[feature]) for row in scam_rows) / len(scam_rows)
-            for feature in NUMERIC_FEATURES
-        }
-        self.safe_domains = {str(row["domain"]) for row in safe_rows}
-        self.scam_domains = {str(row["domain"]) for row in scam_rows}
+        grouped: dict[int, list[dict[str, int | float | str | bool]]] = {0: [], 1: []}
+        for row, label in zip(feature_rows, labels):
+            grouped[int(label)].append(row)
+
+        total = len(labels)
+        for label, rows in grouped.items():
+            if not rows:
+                raise ValueError("Training data must include both safe and scam samples.")
+            self.priors[label] = len(rows) / total
+            self.means[label] = {}
+            self.variances[label] = {}
+            for feature in MODEL_FEATURES:
+                values = [float(row.get(feature, 0.0)) for row in rows]
+                mean = sum(values) / len(values)
+                variance = sum((value - mean) ** 2 for value in values) / len(values)
+                self.means[label][feature] = mean
+                self.variances[label][feature] = max(variance, 1e-6)
+
+        self.safe_domains = {str(row.get("registered_domain", "")) for row in grouped[0] if row.get("registered_domain")}
+        self.scam_domains = {str(row.get("registered_domain", "")) for row in grouped[1] if row.get("registered_domain")}
         return self
 
-    def predict_proba(self, feature_row: dict[str, int | float | str]) -> float:
-        score = 0.0
-        for feature in NUMERIC_FEATURES:
-            value = float(feature_row[feature])
-            safe_mean = self.safe_means.get(feature, 0.0)
-            scam_mean = self.scam_means.get(feature, 0.0)
-            weight = abs(scam_mean - safe_mean) or 1.0
-            midpoint = (safe_mean + scam_mean) / 2.0
-            direction = 1.0 if scam_mean >= safe_mean else -1.0
-            score += direction * ((value - midpoint) / weight)
+    def predict_proba(
+        self,
+        feature_row: dict[str, int | float | str | bool] | list[dict[str, int | float | str | bool]],
+    ) -> float | list[float]:
+        rows = feature_row if isinstance(feature_row, list) else [feature_row]
+        probabilities = [self._predict_single(row) for row in rows]
+        return probabilities if isinstance(feature_row, list) else float(probabilities[0])
 
-        domain = str(feature_row.get("domain", ""))
-        if domain in self.scam_domains:
-            score += 1.35
-        elif domain in self.safe_domains:
-            score -= 1.15
+    def _predict_single(self, row: dict[str, int | float | str | bool]) -> float:
+        safe_log = log(self.priors.get(0, 0.5))
+        scam_log = log(self.priors.get(1, 0.5))
 
-        return 1.0 / (1.0 + exp(-score))
+        for feature in MODEL_FEATURES:
+            value = float(row.get(feature, 0.0))
+            safe_log += self._gaussian_log_likelihood(
+                value,
+                self.means[0][feature],
+                self.variances[0][feature],
+            )
+            scam_log += self._gaussian_log_likelihood(
+                value,
+                self.means[1][feature],
+                self.variances[1][feature],
+            )
+
+        registered_domain = str(row.get("registered_domain", ""))
+        if registered_domain in self.scam_domains and registered_domain not in self.safe_domains:
+            scam_log += 0.8
+        elif registered_domain in self.safe_domains and registered_domain not in self.scam_domains:
+            safe_log += 0.6
+
+        difference = max(min(scam_log - safe_log, 60), -60)
+        return 1.0 / (1.0 + exp(-difference))
+
+    @staticmethod
+    def _gaussian_log_likelihood(value: float, mean: float, variance: float) -> float:
+        return -0.5 * log(2 * pi * variance) - ((value - mean) ** 2) / (2 * variance)

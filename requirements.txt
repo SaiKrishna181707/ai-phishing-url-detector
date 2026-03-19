@@ -1,2 +1,4 @@
 fastapi>=0.110,<1.0
+python-whois>=0.9,<1.0
+requests>=2.32,<3.0
 uvicorn>=0.29,<1.0
